@@ -40,3 +40,7 @@ Thumbs.db
 .idea/
 .vscode/
 node_modules/
+
+# ── Stale installers (served at runtime, not committed) ──
+dist/project_rag_hybrid.zip
+dist/ProjectRAG-Setup.exe

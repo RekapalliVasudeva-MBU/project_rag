@@ -58,8 +58,8 @@
 <section id="home" class="relative z-10 pt-32 pb-16 px-6 max-w-5xl mx-auto text-center reveal">
   <div class="glass rounded-3xl p-10 md:p-16 relative overflow-hidden">
     <div class="absolute top-0 right-0 w-80 h-80 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/4" style="background:rgba(168,85,247,.12)"></div>
-    <h1 class="text-4xl md:text-5xl font-bold hero-text">Precision-Engineered Intelligence, running on my local GPU.</h1>
-    <p class="mt-6 text-zinc-300 text-lg max-w-2xl mx-auto">A RAG knowledge assistant powered by my own documents and a local Ollama model (RTX 5070). Answers come straight from the indexed knowledge base, streamed token-by-token.</p>
+    <h1 class="text-4xl md:text-5xl font-bold hero-text">AetherMind — Your AI, running privately on your machine.</h1>
+    <p class="mt-6 text-zinc-300 text-lg max-w-2xl mx-auto">A local-first AI assistant and RAG knowledge base powered by your own documents and your own API key or local model. Answers come straight from your indexed knowledge, streamed token-by-token — nothing leaves your machine except to the provider you choose.</p>
     <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
       <button onclick="scrollToChat()" class="cta text-white px-6 py-3 rounded-xl font-semibold">Start Chatting</button>
       <a href="#download" class="glass px-6 py-3 rounded-xl font-semibold hover:border-purple-400/40">Download the Desktop App</a>
@@ -88,16 +88,6 @@
 
 <section id="download" class="relative z-10 px-6 max-w-4xl mx-auto pb-24 reveal">
   <div class="glass rounded-3xl p-8 md:p-12">
-    <h2 class="text-3xl font-bold">Take it with you — the Desktop App</h2>
-    <p class="mt-3 text-zinc-300">Download the full open-source <b>project_rag_hybrid</b> code. It runs entirely on <b>your</b> machine with <b>your</b> PDFs and <b>your</b> own API key or local model. Nothing connects back to this site, and you never see my indexed data.</p>
-    <ul class="mt-5 space-y-2 text-sm text-zinc-300 list-disc pl-5">
-      <li>Creates its own <code>rag_pdfs/</code> folder for your documents</li>
-      <li><code>rag_settings.json</code> stores your provider choice + API key locally (masked in the UI)</li>
-      <li>Chat / Shelf / Settings tabs — interactive, beautiful, fully self-hosted</li>
-    </ul>
-    <a id="dl-btn" href="/download/desktop" class="inline-block mt-6 cta text-white px-6 py-3 rounded-xl font-semibold">⬇ Download project_rag_hybrid.zip</a>
-  </div>
-  <div class="glass rounded-3xl p-8 md:p-12 mt-6">
     <h2 class="text-3xl font-bold">Aether — AI Agent + RAG Desktop App</h2>
     <p class="mt-3 text-zinc-300">A standalone <b>AI agent</b> you install on Windows. It has <b>Normal</b> mode (general agent with tools, skills, memory, MCP) and <b>RAG</b> mode (grounded on your own PDFs). Paste your own OpenRouter key in the app — it never ships with mine.</p>
     <ul class="mt-5 space-y-2 text-sm text-zinc-300 list-disc pl-5">
