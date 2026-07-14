@@ -48,7 +48,7 @@ from chromadb.utils import embedding_functions
 import ollama
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # --- minimal OpenTelemetry tracing (no external collector: prints to console) ---
@@ -919,7 +919,7 @@ async def download_aether():
     # Serve the installer from GitHub Releases (fast CDN) instead of the slow
     # ngrok tunnel. Kept as a redirect so old links/bookmarks keep working.
     return RedirectResponse(
-        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.0/Aether-Setup.exe",
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.1/Aether-Setup.exe",
         status_code=302,
     )
 
