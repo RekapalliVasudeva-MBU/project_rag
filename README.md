@@ -2,7 +2,7 @@
 
 > **🌐 Live site:** [https://marshy-ancient-rebuild.ngrok-free.dev](https://marshy-ancient-rebuild.ngrok-free.dev)
 > — chat with your PDFs, **download the desktop app**, and read the docs.
-> Desktop app download: **[/download/aether](https://marshy-ancient-rebuild.ngrok-free.dev/download/aether)** ·
+> Desktop app download: **[GitHub Releases](https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.0/Aether-Setup.exe)** (fast CDN) ·
 > Desktop docs: **[/aether-docs](https://marshy-ancient-rebuild.ngrok-free.dev/aether-docs)**.
 
 The **hosted web RAG server** for the AetherMind project — a FastAPI app that lets you chat with

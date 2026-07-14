@@ -916,20 +916,11 @@ async def aether_docs():
 
 @app.get("/download/aether")
 async def download_aether():
-    if not CONFIG["allow_download"]:
-        return JSONResponse({"error": "downloads disabled"}, status_code=403)
-    # Aether desktop app installer (self-contained, no Inno Setup needed)
-    exe_path = PROJECT_DIR / "dist" / "Aether-Setup.exe"
-    if not exe_path.exists():
-        return JSONResponse(
-            {"error": "build the Aether installer first: python make_installer.py"},
-            status_code=404,
-        )
-    store.log(_now_session(), "Aether-Setup", "download")
-    return FileResponse(
-        exe_path,
-        filename="Aether-Setup.exe",
-        media_type="application/octet-stream",
+    # Serve the installer from GitHub Releases (fast CDN) instead of the slow
+    # ngrok tunnel. Kept as a redirect so old links/bookmarks keep working.
+    return RedirectResponse(
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.0/Aether-Setup.exe",
+        status_code=302,
     )
 
 
