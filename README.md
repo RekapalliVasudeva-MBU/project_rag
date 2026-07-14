@@ -1,5 +1,10 @@
 # AetherMind — project_rag (Web RAG Server)
 
+> **🌐 Live site:** [https://marshy-ancient-rebuild.ngrok-free.dev](https://marshy-ancient-rebuild.ngrok-free.dev)
+> — chat with your PDFs, **download the desktop app**, and read the docs.
+> Desktop app download: **[/download/aether](https://marshy-ancient-rebuild.ngrok-free.dev/download/aether)** ·
+> Desktop docs: **[/aether-docs](https://marshy-ancient-rebuild.ngrok-free.dev/aether-docs)**.
+
 The **hosted web RAG server** for the AetherMind project — a FastAPI app that lets you chat with
 your own PDFs through a hybrid retrieval pipeline, served on a public website.
 

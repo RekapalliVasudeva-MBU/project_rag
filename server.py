@@ -911,7 +911,7 @@ async def knowledge_guide():
 
 @app.get("/aether-docs")
 async def aether_docs():
-    return FileResponse(WEB_UI / "aether-docs.html")
+    return FileResponse(UI_DIR / "aether-docs.html")
 
 
 @app.get("/download/aether")
