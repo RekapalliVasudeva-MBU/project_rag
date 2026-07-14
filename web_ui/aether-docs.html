@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aether Desktop — Documentation</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#0b0b10; color:#e7e7ea; margin:0; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 48px 20px 80px; }
+    h1 { font-size: 2.4rem; margin-bottom: .2rem; }
+    .sub { color:#a1a1aa; margin-bottom: 2rem; }
+    h2 { margin-top: 2.4rem; border-left: 3px solid #8b5cf6; padding-left: 12px; }
+    h3 { margin-top: 1.6rem; color:#c4b5fd; }
+    code, pre { background:#16161d; border-radius:8px; }
+    code { padding: 2px 6px; font-size:.9rem; }
+    pre { padding: 14px 16px; overflow:auto; }
+    a { color:#a78bfa; }
+    .card { background:#12121a; border:1px solid #26262f; border-radius:14px; padding:20px 22px; margin:18px 0; }
+    .steps { counter-reset: step; list-style:none; padding:0; }
+    .steps li { position:relative; padding:10px 0 10px 44px; border-bottom:1px solid #1c1c25; }
+    .steps li:before { counter-increment:step; content:counter(step); position:absolute; left:0; top:10px; width:28px; height:28px; background:#8b5cf6; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; }
+    .pill { display:inline-block; background:#1e1b2e; color:#c4b5fd; border:1px solid #2e2a44; border-radius:999px; padding:2px 10px; font-size:.8rem; margin-right:6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Aether Desktop</h1>
+    <p class="sub">A self-hosted AI agent + RAG desktop app for Windows. Two modes, your data, your keys.</p>
+
+    <div class="card">
+      <p><span class="pill">Normal mode</span> a general AI agent with tools, skills, memory, and MCP — runs locally on your machine.</p>
+      <p><span class="pill">RAG mode</span> the same agent grounded on <b>your own PDFs</b> via a hybrid Docling + BM25 + reranker pipeline.</p>
+      <p>It is the desktop companion to the <a href="/">AetherMind web RAG server</a>. Same engine, different delivery.</p>
+    </div>
+
+    <h2>Getting started</h2>
+    <ol class="steps">
+      <li><b>Download</b> <code>Aether-Setup.exe</code> from the <a href="/#download">home page download section</a>.</li>
+      <li><b>Run the installer</b> — it extracts Aether to <code>%LOCALAPPDATA%/Aether</code> and creates Desktop + Start Menu shortcuts (with the Aether icon).</li>
+      <li><b>Launch Aether</b> from the Start Menu or Desktop shortcut.</li>
+      <li><b>Paste your provider key</b> in the left sidebar → <i>Provider settings</i>. We recommend a free OpenRouter key. The key is stored only in <code>%APPDATA%/aether/.env</code> on your machine — it is never sent anywhere except your chosen provider.</li>
+      <li><b>Chat.</b> Toggle capabilities (Skills / Tools / MCP / Memory / RAG) and add PDFs in the RAG panel.</li>
+    </ol>
+
+    <h2>Where things live</h2>
+    <div class="card">
+      <h3>Installation</h3>
+      <pre><code>%LOCALAPPDATA%/Aether/Aether.exe      # the app
+%LOCALAPPDATA%/Aether/logo.ico        # shortcut icon</code></pre>
+      <h3>Your data (you own this)</h3>
+      <pre><code>%APPDATA%/aether/config.yaml          # settings + capability toggles
+%APPDATA%/aether/.env                 # YOUR provider key (never ours)
+%APPDATA%/aether/skills/              # skill library
+%APPDATA%/aether/sessions/            # chat sessions
+%APPDATA%/aether/rag_pdfs/            # your PDFs
+%APPDATA%/aether/chroma/              # local vector store</code></pre>
+    </div>
+
+    <h2>Capabilities</h2>
+    <p>Flip these in the sidebar to shape what the agent can do:</p>
+    <ul>
+      <li><b>Skills</b> — reusable prompt/procedure library.</li>
+      <li><b>Tools</b> — terminal, file, web, code execution.</li>
+      <li><b>MCP</b> — Model Context Protocol servers you configure in <code>config.yaml</code> under <code>mcp.servers</code>.</li>
+      <li><b>Memory</b> — the agent remembers facts across sessions.</li>
+      <li><b>RAG</b> — answers are grounded on your PDFs.</li>
+    </ul>
+
+    <h2>Configuration</h2>
+    <p>Edit <code>%APPDATA%/aether/config.yaml</code>. Example:</p>
+    <pre><code>model:
+  default: "openrouter/free"   # or any OpenRouter model
+capabilities:
+  skills: true
+  tools: true
+  mcp: false
+  memory: true
+  rag: true
+mcp:
+  servers: {}                   # add MCP servers here</code></pre>
+
+    <h2>Gateway (optional)</h2>
+    <p>The sidebar has a <b>Gateway</b> control to start/stop a Telegram bridge. It is inert unless you paste a Telegram bot token in settings — if you don't use it, nothing connects out.</p>
+
+    <h2>Build from source</h2>
+    <pre><code>git clone &lt;aether-desktop repo&gt;
+cd aether
+pip install -r requirements.txt
+python -m PyInstaller --name Aether --windowed --onefile \
+  --add-data "desktop_ui;desktop_ui" build_aether.py
+python make_installer.py   # produces dist/Aether-Setup.exe</code></pre>
+
+    <h2>Privacy</h2>
+    <p>Aether ships <b>without any API key</b>. It talks only to the provider you configure and (optionally) a gateway you enable. The distributed build contains no credentials.</p>
+
+    <p style="margin-top:3rem; color:#71717a; font-size:.85rem;">Aether Desktop is part of the AetherMind project — a 2-in-1 suite: a hosted web RAG server and a self-hosted desktop agent. See the GitHub repos for source.</p>
+  </div>
+</body>
+</html>

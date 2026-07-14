@@ -1,0 +1,14 @@
+{
+  "old": {
+    "recall@5": 0.8,
+    "recall@6": 0.8,
+    "context_recall": 0.6,
+    "faithfulness": 0.7
+  },
+  "new": {
+    "recall@5": 0.8,
+    "recall@6": 0.8,
+    "context_recall": 1.0,
+    "faithfulness": 0.9
+  }
+}

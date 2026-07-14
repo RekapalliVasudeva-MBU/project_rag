@@ -1,0 +1,42 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+
+# ── Secrets / credentials (NEVER commit) ──
+.env
+*.env
+.env.*
+auth.json
+credentials.json
+server_config.json
+
+# ── Built installers (too large for git; download from the website) ──
+dist/
+*.exe
+*.zip
+
+# ── Local data generated at runtime ──
+chroma/
+rag_vector_db/
+rag_pdfs/
+sessions/
+session_backups/
+user_uploads/
+config.yaml
+dashboard_log/
+*.log
+
+# ── Stray Windows device files ──
+nul
+nul/
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules/
