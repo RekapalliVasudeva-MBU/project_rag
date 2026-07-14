@@ -916,11 +916,22 @@ async def aether_docs():
 
 @app.get("/download/aether")
 async def download_aether():
-    # Serve the installer from GitHub Releases (fast CDN) instead of the slow
-    # ngrok tunnel. Kept as a redirect so old links/bookmarks keep working.
-    return RedirectResponse(
-        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.1/Aether-Setup.exe",
-        status_code=302,
+    # Serve the Aether Desktop installer directly from this server (fast, no
+    # external CDN dependency). The same build is also published to GitHub
+    # Releases (https://github.com/RekapalliVasudeva-MBU/aether-desktop) as a
+    # mirror. Installs to %LOCALAPPDATA%\Aether with desktop + start-menu
+    # shortcuts; no admin/UAC required.
+    exe_path = PROJECT_DIR / "dist" / "Aether-Setup.exe"
+    if not exe_path.exists():
+        return JSONResponse(
+            {"error": "installer not built", "mirror": "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/latest"},
+            status_code=404,
+        )
+    store.log(_now_session(), "Aether-Setup", "download")
+    return FileResponse(
+        exe_path,
+        filename="Aether-Setup.exe",
+        media_type="application/octet-stream",
     )
 
 
