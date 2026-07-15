@@ -916,22 +916,13 @@ async def aether_docs():
 
 @app.get("/download/aether")
 async def download_aether():
-    # Serve the Aether Desktop installer directly from this server (fast, no
-    # external CDN dependency). The same build is also published to GitHub
-    # Releases (https://github.com/RekapalliVasudeva-MBU/aether-desktop) as a
-    # mirror. Installs to %LOCALAPPDATA%\Aether with desktop + start-menu
-    # shortcuts; no admin/UAC required.
-    exe_path = PROJECT_DIR / "dist" / "Aether-Setup.exe"
-    if not exe_path.exists():
-        return JSONResponse(
-            {"error": "installer not built", "mirror": "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/latest"},
-            status_code=404,
-        )
-    store.log(_now_session(), "Aether-Setup", "download")
-    return FileResponse(
-        exe_path,
-        filename="Aether-Setup.exe",
-        media_type="application/octet-stream",
+    # Redirect to the GitHub Release (free, fast CDN) so the 135 MB installer
+    # never burns this server's tunnel bandwidth. Installs to
+    # %LOCALAPPDATA%\Aether with desktop + start-menu shortcuts; no admin/UAC.
+    store.log(_now_session(), "Aether-Setup", "download-redirect")
+    return RedirectResponse(
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.1.1/Aether-Setup.exe",
+        status_code=302,
     )
 
 
@@ -962,29 +953,15 @@ if UI_DIR.exists():
 # Lifespan: ngrok tunnel
 # ---------------------------------------------------------------------------
 def _open_tunnel():
-    try:
-        from pyngrok import ngrok
-
-        token = CONFIG["ngrok_auth_token"]
-        domain = CONFIG["ngrok_static_domain"]
-        if token:
-            ngrok.set_auth_token(token)
-        if domain:
-            public_url = ngrok.connect(CONFIG["port"], domain=domain).public_url
-        else:
-            public_url = ngrok.connect(CONFIG["port"]).public_url
-        CONFIG["public_base_url"] = public_url
-        print("\n" + "=" * 60)
-        print("AETHERMIND LOCAL RAG SERVER ONLINE")
-        print(f"Public URL (share this): {public_url}")
-        print(f"Local URL:  http://{CONFIG['host']}:{CONFIG['port']}/")
-        print(f"Desktop app download: {public_url}/download/desktop")
-        print("=" * 60 + "\n")
-        return ngrok, public_url
-    except Exception as e:
-        print(f"\nngrok tunnel NOT started (server still runs on localhost): {e}")
-        print(f"   Local URL: http://{CONFIG['host']}:{CONFIG['port']}/")
-        return None, None
+    # Public URL is provided by an external tunnel (cloudflared quick tunnel),
+    # launched separately so the 135 MB installer never burns a metered
+    # tunnel's bandwidth. The server only binds locally on CONFIG["port"].
+    print(f"\n{'=' * 60}")
+    print("AETHERMIND LOCAL RAG SERVER ONLINE (local only)")
+    print(f"Local URL:  http://{CONFIG['host']}:{CONFIG['port']}/")
+    print("Public URL is served via cloudflared (see Agent_OS.cmd).")
+    print("=" * 60 + "\n")
+    return None, None
 
 
 if __name__ == "__main__":
