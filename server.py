@@ -921,7 +921,7 @@ async def download_aether():
     # %LOCALAPPDATA%\Aether with desktop + start-menu shortcuts; no admin/UAC.
     store.log(_now_session(), "Aether-Setup", "download-redirect")
     return RedirectResponse(
-        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.2.0/Aether-Setup.exe",
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.2.1/Aether-Setup.exe",
         status_code=302,
     )
 
