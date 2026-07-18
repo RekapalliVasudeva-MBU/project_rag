@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: project-rag
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8000
+      - key: OPENROUTER_API_KEY
+        sync: false
