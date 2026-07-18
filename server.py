@@ -971,10 +971,13 @@ if __name__ == "__main__":
     print(f"[init] Generator: local Ollama ({CONFIG['ollama_model']}) on your GPU")
     print(f"[init] Requests run ONE AT A TIME (serial queue).\n")
 
+    # Railway / cloud: honor $PORT and bind 0.0.0.0
+    _host = os.environ.get("HOST", CONFIG["host"])
+    _port = int(os.environ.get("PORT", CONFIG["port"]))
     config = uvicorn.Config(
         app,
-        host=CONFIG["host"],
-        port=CONFIG["port"],
+        host=_host,
+        port=_port,
         log_level="info",
     )
     server = uvicorn.Server(config)

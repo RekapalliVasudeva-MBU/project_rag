@@ -1,0 +1,8 @@
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[env]
+HOST = "0.0.0.0"
