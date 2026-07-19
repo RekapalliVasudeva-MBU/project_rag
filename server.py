@@ -916,12 +916,19 @@ async def aether_docs():
 
 @app.get("/download/aether")
 async def download_aether():
-    # Redirect to the GitHub Release (free, fast CDN) so the 135 MB installer
-    # never burns this server's tunnel bandwidth. Installs to
-    # %LOCALAPPDATA%\Aether with desktop + start-menu shortcuts; no admin/UAC.
-    store.log(_now_session(), "Aether-Setup", "download-redirect")
+    # Serve the locally-built installer (includes the WebView2 auto-install
+    # fix for the 'opens 2s then closes' bug). Falls back to the GitHub
+    # release if the local build is missing.
+    store.log(_now_session(), "Aether-Setup", "download")
+    local = PROJECT_DIR / "dist" / "Aether-Setup.exe"
+    if local.exists():
+        return FileResponse(
+            local,
+            filename="Aether-Setup.exe",
+            media_type="application/octet-stream",
+        )
     return RedirectResponse(
-        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.2.5/Aether-Setup.exe",
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.3.1/Aether-Setup.exe",
         status_code=302,
     )
 
