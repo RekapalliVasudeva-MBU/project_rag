@@ -959,16 +959,39 @@ if UI_DIR.exists():
 # ---------------------------------------------------------------------------
 # Lifespan: ngrok tunnel
 # ---------------------------------------------------------------------------
-def _open_tunnel():
-    # Public URL is provided by an external tunnel (cloudflared quick tunnel),
-    # launched separately so the 135 MB installer never burns a metered
-    # tunnel's bandwidth. The server only binds locally on CONFIG["port"].
+def _open_tunnel() -> tuple:
+    """Start an ngrok tunnel using pyngrok.
+    Returns (ngrok process, public_url) or (None, None) if not configured.
+    Requires CONFIG["ngrok_auth_token"] to be set.
+    Set CONFIG["ngrok_static_domain"] for a stable URL (e.g. "yourname.ngrok-free.app")."""
+    auth_token = CONFIG.get("ngrok_auth_token", "")
+    if not auth_token:
+        return None, None
+
+    from pyngrok import ngrok
+
     print(f"\n{'=' * 60}")
-    print("AETHERMIND LOCAL RAG SERVER ONLINE (local only)")
-    print(f"Local URL:  http://{CONFIG['host']}:{CONFIG['port']}/")
-    print("Public URL is served via cloudflared (see Agent_OS.cmd).")
-    print("=" * 60 + "\n")
-    return None, None
+    print("Starting ngrok tunnel...")
+
+    try:
+        ngrok.set_auth_token(auth_token)
+        static_domain = CONFIG.get("ngrok_static_domain", "")
+
+        if static_domain:
+            tunnel = ngrok.connect(addr=CONFIG["port"], proto="https", domain=static_domain)
+        else:
+            tunnel = ngrok.connect(addr=CONFIG["port"], proto="https")
+
+        public_url = tunnel.public_url
+        print(f"✅ ngrok tunnel ready: {public_url}")
+        print(f"Local URL:  http://{CONFIG['host']}:{CONFIG['port']}/")
+        print(f"Public URL: {public_url}")
+        print("=" * 60 + "\n")
+        return tunnel, public_url
+
+    except Exception as e:
+        print(f"⚠️ Failed to start ngrok tunnel: {e}")
+        return None, None
 
 
 if __name__ == "__main__":
