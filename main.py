@@ -169,8 +169,11 @@ def process_rag_pipeline(source_folder: str, converter, chunker):
     db_path = "./rag_vector_db"
     client = chromadb.PersistentClient(path=db_path)
 
-    emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
+    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
+    emb_fn = embedding_functions.OpenAIEmbeddingFunction(
+        api_key=openrouter_api_key,
+        api_base="https://openrouter.ai/api/v1",
+        model_name="text-embedding-3-large",
     )
 
     collection_name = "docling_knowledge_base"

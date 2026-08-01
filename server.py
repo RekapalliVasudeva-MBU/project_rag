@@ -41,6 +41,7 @@ if sys.stderr and sys.stderr.encoding and "utf" not in sys.stderr.encoding.lower
     except Exception:
         pass
 
+import importlib
 import chromadb
 from chromadb.utils import embedding_functions
 from fastapi import FastAPI, Request
@@ -63,8 +64,14 @@ _tp.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 trace.set_tracer_provider(_tp)
 tracer = trace.get_tracer("aethermind.rag")
 
-# --- local RAG backend (docling pipeline lives in main.py) ---
-import main as rag
+# --- lazy-loaded local RAG pipeline (docling pipeline lives in main.py) ---
+_rag_module = None
+
+def _load_rag_module():
+    global _rag_module
+    if _rag_module is None:
+        _rag_module = importlib.import_module("main")
+    return _rag_module
 
 PROJECT_DIR = Path(__file__).parent
 UI_DIR = PROJECT_DIR / "web_ui"          # premium UI (static HTML) served to visitors
@@ -111,8 +118,11 @@ CONFIG = load_config()
 # ChromaDB collection (built by main.py's docling pipeline)
 # ---------------------------------------------------------------------------
 client = chromadb.PersistentClient(path=str(PROJECT_DIR / "rag_vector_db"))
-emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
+openrouter_api_key = CONFIG.get("openrouter_api_key") or os.environ.get("OPENROUTER_API_KEY", "")
+emb_fn = embedding_functions.OpenAIEmbeddingFunction(
+    api_key=openrouter_api_key,
+    api_base="https://openrouter.ai/api/v1",
+    model_name="text-embedding-3-large",
 )
 try:
     collection = client.get_collection(
@@ -171,6 +181,8 @@ async def _ingest_github_assets() -> bool:
             return [payload]
         return payload if isinstance(payload, list) else []
 
+    rag = _load_rag_module()
+
     async def _download_tree(path: str):
         entries = await _fetch_tree(path)
         for entry in entries:
@@ -205,6 +217,7 @@ async def _ingest_github_assets() -> bool:
     chunk_count = 0
     for file_path in downloaded_files:
         try:
+            rag = _load_rag_module()
             chunks = await asyncio.to_thread(rag.chunk_single_pdf, str(file_path), str(temp_dir))
             if not chunks:
                 continue
@@ -439,7 +452,6 @@ def _clean_query(q: str) -> str:
 
 import re
 from rank_bm25 import BM25Okapi
-from sentence_transformers import CrossEncoder
 
 # ---- Light rule-based router (Step 1): no LLM, just pattern match ----
 _PAGE_RE = re.compile(r"page\s+(\d+)", re.IGNORECASE)
@@ -468,9 +480,6 @@ if not _BM25_DOCS:
 _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
 
 # ---- Local CrossEncoder reranker (Step 3) ----
-_RERANKER = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-
-
 # ---- Hybrid retrieval + Reciprocal Rank Fusion (Step 2) ----
 def sync_hybrid_search(query: str, n_results: int = 10):
     clean_q = _clean_query(query)
@@ -555,11 +564,10 @@ async def generate_rag_stream(user_question: str, session_id: str):
                                     key=lambda x: order.get(x[1].get("id"), 0))
                     docs, metas = [d for d, _ in paired], [m for _, m in paired]
             else:
-                # Step 2+3 — hybrid (dense + BM25) -> RRF -> CrossEncoder rerank
+                # Step 2+3 — hybrid (dense + BM25) -> RRF retrieval.
                 docs, metas = await loop.run_in_executor(None, sync_hybrid_search, clean_q)
                 # Relevance guard: drop chunks whose semantic distance is too high
-                # (grounding — keeps off-topic queries honest). RRF ranks them, but
-                # if the top match is genuinely unrelated, we should not answer.
+                # (grounding — keeps off-topic queries honest).
                 dist_res = collection.query(query_texts=[clean_q], n_results=len(docs))
                 dist_map = {}
                 for cid, dist in zip(dist_res["ids"][0], dist_res["distances"][0]):
@@ -570,14 +578,6 @@ async def generate_rag_stream(user_question: str, session_id: str):
                     docs, metas = zip(*kept)
                     docs, metas = list(docs), list(metas)
                 if docs:
-                    pairs = [(clean_q, d) for d in docs]
-                    scores = _RERANKER.predict(pairs)
-                    # sort by score ONLY — comparing the dict metadata directly
-                    # ('<' not supported between dicts) fails whenever scores tie.
-                    ranked = sorted(zip(scores, docs, metas),
-                                    key=lambda x: x[0], reverse=True)
-                    docs = [d for _, d, _ in ranked]
-                    metas = [m for _, _, m in ranked]
                     docs = docs[:6]
                     metas = metas[:6]
 
@@ -761,6 +761,7 @@ async def upload_endpoint(file: UploadFile = File(...)):
 
     # 2) chunk with the SAME docling pipeline (reuses main.py)
     try:
+        rag = _load_rag_module()
         chunks = await asyncio.to_thread(
             rag.chunk_single_pdf, str(dest), str(temp_dir)
         )

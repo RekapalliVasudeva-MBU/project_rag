@@ -32,7 +32,6 @@ setup(
         "torch>=2.0.0",
         "transformers>=4.36.0",
         "chromadb>=0.4.0",
-        "sentence-transformers>=2.2.0",
         "pillow>=10.0.0",
         "rich>=14.3.0",
         "tqdm>=4.0.0",
