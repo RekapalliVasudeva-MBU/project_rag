@@ -84,7 +84,7 @@ DEFAULT_CONFIG = {
     "rag_github_repo": "",           # e.g. "owner/repo"
     "rag_github_path": "pdfs",       # directory inside the repo to scan
     "rag_github_ref": "",            # optional branch/tag/SHA
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "port": 8000,
     "postgres": {
         "dsn": "dbname=rag_site user=postgres password=postgres host=127.0.0.1 port=5432"
