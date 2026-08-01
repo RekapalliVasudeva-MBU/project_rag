@@ -1,48 +1,45 @@
 # AetherMind — project_rag (Web RAG Server)
 
-> **🌐 Live site:** [https://marshy-ancient-rebuild.ngrok-free.dev](https://marshy-ancient-rebuild.ngrok-free.dev)
-> — chat with your PDFs, **download the desktop app**, and read the docs.
-> Desktop app download: **[GitHub Releases](https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.0/Aether-Setup.exe)** (fast CDN) ·
-> Desktop docs: **[/aether-docs](https://marshy-ancient-rebuild.ngrok-free.dev/aether-docs)**.
+> A hosted web RAG backend for AetherMind. The static landing page is served separately,
+> while the API ingests GitHub-hosted PDFs and answers questions with OpenRouter.
 
-The **hosted web RAG server** for the AetherMind project — a FastAPI app that lets you chat with
-your own PDFs through a hybrid retrieval pipeline, served on a public website.
+The **project_rag** repo contains the cloud-ready RAG backend and website assets for AetherMind.
+It is designed to run on a Python host such as Render, while the frontend can be served from
+GitHub Pages or another static host.
 
-It is one half of the **AetherMind** 2-in-1 suite:
+It is one half of the **AetherMind** suite:
 
 | Repo | What it is |
 |------|------------|
-| **`project_rag`** (this repo) | The **web RAG server** — chat with your PDFs in a browser. |
-| [`aether-desktop`](https://github.com/<your-org>/aether-desktop) | The **desktop companion app** — the same engine packaged as a Windows `.exe`. |
-
-Both share the same hybrid RAG core; this repo runs it in the cloud and also **hosts the website
-and the desktop-app download + documentation**.
+| **`project_rag`** (this repo) | The **web RAG server** — backend + static UI assets. |
+| [`aether-desktop`](https://github.com/RekapalliVasudeva-MBU/aether-desktop) | The **desktop companion app** — downloaded from GitHub. |
 
 ## What it does
 
 - Hybrid RAG: **Docling** PDF parsing → chunks → **BM25 + vector** retrieval → **reranker** → **RRF** fusion.
-- Chat UI (Chat / Shelf / Settings tabs) with your own provider key or a local Ollama model.
-- Serves the public website (`/`) and the **desktop app download** (`/download/aether`) +
-  **desktop docs** (`/aether-docs`).
-- PostgreSQL-backed visitor logging (optional).
+- Cloud answer generation using **OpenRouter**.
+- Supports GitHub-backed PDF ingestion via `RAG_PDF_SOURCE=github`.
+- Serves static UI assets, chat endpoints, and app download redirects.
+- Optional PostgreSQL visitor logging.
 
 ## Run locally
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env        # add your provider key / ngrok token
-python server.py            # http://127.0.0.1:8000
+cp .env.example .env
+# edit .env and set OPENROUTER_API_KEY, RAG_GITHUB_REPO, RAG_GITHUB_PATH
+uvicorn server:app --host 0.0.0.0 --port 8000
 ```
-
-The server auto-opens an ngrok tunnel to a static domain when `NGROK_AUTHTOKEN` is set.
 
 ## Project layout
 
 ```
-server.py            # FastAPI app + ngrok tunnel + download routes
-web_ui/              # website (index.html, knowledge.html, aether-docs.html)
-dist/                # built installers (ProjectRAG-Setup.exe, Aether-Setup.exe) — not committed
+server.py            # FastAPI backend for the chat API and static UI assets
+web_ui/              # static website pages (index.html, knowledge.html, aether-docs.html)
+render.yaml          # Render deployment configuration
+requirements.txt     # runtime dependencies for the backend
 ```
+
 
 ## Related
 

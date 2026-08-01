@@ -1,12 +1,11 @@
 services:
   - type: web
-    name: project-rag
-    runtime: python
+    name: aethermind-rag
+    env: python
     plan: free
-    branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
-    healthCheckPath: /
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
       - key: HOST
         value: 0.0.0.0
@@ -14,3 +13,9 @@ services:
         value: 8000
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: RAG_PDF_SOURCE
+        value: github
+      - key: RAG_GITHUB_REPO
+        value: ""
+      - key: RAG_GITHUB_PATH
+        value: pdfs

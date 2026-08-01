@@ -40,16 +40,13 @@ setup(
         "fastapi>=0.110.0",
         "uvicorn>=0.29.0",
         "sse-starlette>=2.0.0",
-        "pyngrok>=7.0.0",
         "psycopg2-binary>=2.9.0",
-        "ollama>=0.1.0",
+        "openai>=1.0.0",
+        "rank-bm25>=0.2.0",
+        "python-multipart>=0.0.9",
+        "python-dotenv>=1.0.0",
         "opentelemetry-api>=1.20.0",
         "opentelemetry-sdk>=1.20.0",
     ],
-    entry_points={
-        "console_scripts": [
-            "rag-main=main:main",
-        ],
-    },
     zip_safe=False,
 )

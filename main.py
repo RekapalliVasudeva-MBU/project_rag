@@ -7,7 +7,7 @@ Converted from First_Rag.ipynb. Uses the exact pipeline you built:
   - docling DocumentConverter  -> PDF -> markdown (layout + OCR)
   - docling HybridChunker      -> structural chunking (preserves H1/H2 headings)
   - ChromaDB         -> vector storage (headings kept in metadata)
-  - Ollama (local)   -> answer generation
+  - OpenRouter/OpenAI  -> cloud answer generation for hosted deployments
 """
 
 import os
@@ -45,7 +45,6 @@ from docling.chunking import HybridChunker
 from transformers import AutoTokenizer
 import chromadb
 from chromadb.utils import embedding_functions
-import ollama
 import torch
 
 # --- Hardware acceleration for docling ---
@@ -295,7 +294,7 @@ def chunk_single_pdf(pdf_path: str, temp_folder: str) -> list:
 
 
 def ask_rag_system(user_question: str, collection):
-    """Core RAG function: retrieve context, send to local Ollama for generation."""
+    """Legacy helper: retrieve context and send to a model for generation."""
     print(f"\n🤖 User Question: '{user_question}'\n")
     print("🔍 Searching Vector Database for context...")
 
