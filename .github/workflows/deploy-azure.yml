@@ -1,0 +1,145 @@
+# =============================================================================
+# GitHub Actions: Deploy to Azure Container Apps (cost-optimized)
+# Requires: Azure credentials as GitHub secrets (see CREDENTIALS_NEEDED.md)
+# Triggers: successful build-push workflow, manual dispatch
+# =============================================================================
+
+name: Deploy to Azure Container Apps
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CONTAINER_APP_NAME: aethermind-rag
+  RESOURCE_GROUP: aethermind-rg
+  LOCATION: eastus
+  CONTAINER_APP_ENV: aethermind-env
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC - no secrets needed if federated identity configured)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Azure CLI
+        uses: azure/CLI@v2
+
+      - name: Check if Container Apps environment exists
+        id: check_env
+        run: |
+          az containerapp env show \
+            --name ${{ env.CONTAINER_APP_ENV }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --output none 2>/dev/null && echo "exists=true" >> $GITHUB_OUTPUT || echo "exists=false" >> $GITHUB_OUTPUT
+
+      - name: Create Container Apps environment (if missing)
+        if: steps.check_env.outputs.exists == 'false'
+        run: |
+          az containerapp env create \
+            --name ${{ env.CONTAINER_APP_ENV }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --location ${{ env.LOCATION }} \
+            --logs-destination log-analytics \
+            --logs-workspace-id ${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_ID }} \
+            --logs-workspace-key ${{ secrets.AZURE_LOG_ANALYTICS_WORKSPACE_KEY }}
+
+      - name: Check if Container App exists
+        id: check_app
+        run: |
+          az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --output none 2>/dev/null && echo "exists=true" >> $GITHUB_OUTPUT || echo "exists=false" >> $GITHUB_OUTPUT
+
+      - name: Create Container App (if missing)
+        if: steps.check_app.outputs.exists == 'false'
+        run: |
+          az containerapp create \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.CONTAINER_APP_ENV }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            --target-port 8000 \
+            --ingress external \
+            --min-replicas 0 \
+            --max-replicas 3 \
+            --cpu 1.0 \
+            --memory 2Gi \
+            --secrets \
+              openrouter-api-key=${{ secrets.OPENROUTER_API_KEY }} \
+              rag-github-repo=${{ secrets.RAG_GITHUB_REPO }} \
+              rag-github-path=${{ secrets.RAG_GITHUB_PATH }} \
+              rag-github-ref=${{ secrets.RAG_GITHUB_REF }} \
+              postgres-dsn=${{ secrets.RAG_PG_DSN }} \
+            --env-vars \
+              OPENROUTER_API_KEY=secretref:openrouter-api-key \
+              OPENROUTER_MODEL=openrouter/free \
+              RAG_PDF_SOURCE=github \
+              RAG_GITHUB_REPO=secretref:rag-github-repo \
+              RAG_GITHUB_PATH=secretref:rag-github-path \
+              RAG_GITHUB_REF=secretref:rag-github-ref \
+              RAG_PG_DSN=secretref:postgres-dsn \
+              CHROMA_DB_DIR=/data/rag_vector_db \
+              HOST=0.0.0.0 \
+              PORT=8000 \
+            --registry-server ${{ env.REGISTRY }} \
+            --registry-identity system \
+            --scale-rule-name http-queue \
+            --scale-rule-type http \
+            --scale-rule-http-concurrent-requests 10
+
+      - name: Update Container App image (if exists)
+        if: steps.check_app.outputs.exists == 'true'
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Verify deployment
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Container App URL: https://$FQDN"
+          
+          # Wait for revision to be ready
+          sleep 30
+          
+          # Test health endpoint
+          curl -f "https://$FQDN/healthz" || exit 1
+          curl -f "https://$FQDN/api/health" | jq '.status == "ok"' || exit 1
+          
+          echo "✅ Deployment verified at https://$FQDN"
+
+      - name: Output deployment URL
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "DEPLOYMENT_URL=https://$FQDN" >> $GITHUB_OUTPUT
+        id: deploy_output
+
+    outputs:
+      deployment_url: ${{ steps.deploy_output.outputs.DEPLOYMENT_URL }}

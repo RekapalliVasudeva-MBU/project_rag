@@ -109,8 +109,10 @@ CONFIG = load_config()
 
 # ---------------------------------------------------------------------------
 # ChromaDB collection (built by main.py's docling pipeline)
+# Path configurable via CHROMA_DB_DIR env var for persistent volumes in cloud
 # ---------------------------------------------------------------------------
-client = chromadb.PersistentClient(path=str(PROJECT_DIR / "rag_vector_db"))
+CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", str(PROJECT_DIR / "rag_vector_db"))
+client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="all-MiniLM-L6-v2"
 )
@@ -683,8 +685,27 @@ async def queue_worker():
 from contextlib import asynccontextmanager
 
 
+import signal
+
+# Global shutdown flag
+_shutdown = False
+
+
+def _signal_handler(signum, frame):
+    global _shutdown
+    print(f"[signal] Received signal {signum}, initiating graceful shutdown...")
+    _shutdown = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Register signal handlers for graceful shutdown
+    try:
+        signal.signal(signal.SIGTERM, _signal_handler)
+        signal.signal(signal.SIGINT, _signal_handler)
+    except Exception:
+        pass  # Windows may not support all signals
+
     # startup
     asyncio.create_task(queue_worker())
     store.connect()
@@ -693,7 +714,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        pass
+        print("[shutdown] Graceful shutdown complete")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -706,6 +727,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/healthz")
+async def healthz():
+    """Lightweight liveness probe for container orchestration - no DB calls."""
+    return {"status": "ok"}
 
 
 @app.get("/api/health")
