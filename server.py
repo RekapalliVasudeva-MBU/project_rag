@@ -582,15 +582,24 @@ async def generate_rag_stream(user_question: str, session_id: str):
                 # Relevance guard: drop chunks whose semantic distance is too high
                 # (grounding — keeps off-topic queries honest). RRF ranks them, but
                 # if the top match is genuinely unrelated, we should not answer.
-                dist_res = collection.query(query_texts=[clean_q], n_results=len(docs))
-                dist_map = {}
-                for cid, dist in zip(dist_res["ids"][0], dist_res["distances"][0]):
-                    dist_map[cid] = dist
-                kept = [(d, m) for d, m in zip(docs, metas)
-                        if dist_map.get(m.get("id"), 1.0) <= _RELEVANCE_CUTOFF]
-                if kept:
-                    docs, metas = zip(*kept)
-                    docs, metas = list(docs), list(metas)
+                if docs:
+                    try:
+                        n_res = max(1, len(docs))
+                        dist_res = collection.query(query_texts=[clean_q], n_results=n_res)
+                        dist_map = {}
+                        if dist_res and dist_res.get("ids") and dist_res.get("distances"):
+                            for cid, dist in zip(dist_res["ids"][0], dist_res["distances"][0]):
+                                dist_map[cid] = dist
+                        kept = [(d, m) for d, m in zip(docs, metas)
+                                if dist_map.get(m.get("id"), 1.0) <= _RELEVANCE_CUTOFF]
+                        if kept:
+                            docs, metas = zip(*kept)
+                            docs, metas = list(docs), list(metas)
+                        else:
+                            docs, metas = [], []
+                    except Exception as e_dist:
+                        print(f"⚠️ Distance relevance guard warning: {e_dist}")
+
                 if docs:
                     rr_model = get_reranker()
                     if rr_model:
@@ -762,13 +771,19 @@ async def healthz():
 async def health():
     pos = len(_request_queue)
     status = "busy" if _current else "idle"
+    cnt = 0
+    try:
+        if collection is not None:
+            cnt = collection.count()
+    except Exception:
+        cnt = 0
     return {
         "status": "ok",
-        "chunks": collection.count(),
+        "chunks": cnt,
         "queue_position": pos,
         "current_request": bool(_current),
-        "model": CONFIG["openrouter_model"],
-        "postgres": store.enabled,
+        "model": CONFIG.get("openrouter_model", "openrouter/free"),
+        "postgres": getattr(store, "enabled", False),
     }
 
 
