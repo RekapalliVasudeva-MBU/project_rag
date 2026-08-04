@@ -123,14 +123,30 @@ CONFIG = load_config()
 CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", str(PROJECT_DIR / "rag_vector_db"))
 client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 
+emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2"
+)
+
 collection = None
-try:
-    collection = client.get_collection(name="docling_knowledge_base")
-    print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
-except Exception as e:
+for _args in [
+    {"name": "docling_knowledge_base"},
+    {"name": "docling_knowledge_base", "embedding_function": emb_fn},
+]:
     try:
-        collection = client.get_or_create_collection(name="docling_knowledge_base")
-        print(f"✅ Created/retrieved ChromaDB collection with {collection.count()} chunks")
+        col = client.get_collection(**_args)
+        if col is not None and col.count() > 0:
+            collection = col
+            print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
+            break
+    except Exception as _e:
+        print(f"⚠️ get_collection attempt failed: {_e}")
+
+if collection is None:
+    try:
+        collection = client.get_or_create_collection(
+            name="docling_knowledge_base", embedding_function=emb_fn
+        )
+        print(f"✅ Retrieved/created ChromaDB collection with {collection.count()} chunks")
     except Exception as e2:
         print(f"⚠️ Collection get_or_create error: {e2}")
 
