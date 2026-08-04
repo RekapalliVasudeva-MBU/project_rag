@@ -120,7 +120,7 @@ CONFIG = load_config()
 # ChromaDB collection (built by main.py's docling pipeline)
 # Path configurable via CHROMA_DB_DIR env var for persistent volumes in cloud
 # ---------------------------------------------------------------------------
-CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", str(PROJECT_DIR / "rag_vector_db"))
+CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", "").strip() or str(PROJECT_DIR / "rag_vector_db")
 client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 
 emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
