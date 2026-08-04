@@ -126,16 +126,15 @@ emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="all-MiniLM-L6-v2"
 )
 try:
-    collection = client.get_collection(
-        name="docling_knowledge_base", embedding_function=emb_fn
-    )
+    collection = client.get_collection(name="docling_knowledge_base")
     print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
 except Exception as e:
-    # If the collection is missing (fresh repo), create an empty collection so the
-    # server can still start and serve the static UI/downloads. The RAG features
-    # (search/chat) will be effectively no-ops until PDFs are ingested.
     try:
-        collection = client.create_collection(name="docling_knowledge_base", embedding_function=emb_fn)
+        collection = client.get_or_create_collection(
+            name="docling_knowledge_base", embedding_function=emb_fn
+        )
+        print(f"✅ Retrieved/created ChromaDB collection with {collection.count()} chunks")
+    except Exception as e2:
         print("⚠️ ChromaDB collection 'docling_knowledge_base' not found — created an empty collection.")
     except Exception as e2:
         # Fall back to a minimal in-memory shim with the methods the server expects.
