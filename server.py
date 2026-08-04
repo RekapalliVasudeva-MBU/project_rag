@@ -122,33 +122,30 @@ CONFIG = load_config()
 # ---------------------------------------------------------------------------
 CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", str(PROJECT_DIR / "rag_vector_db"))
 client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
-emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
+
+collection = None
 try:
     collection = client.get_collection(name="docling_knowledge_base")
     print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
 except Exception as e:
     try:
-        collection = client.get_or_create_collection(
-            name="docling_knowledge_base", embedding_function=emb_fn
-        )
-        print(f"✅ Retrieved/created ChromaDB collection with {collection.count()} chunks")
+        collection = client.get_or_create_collection(name="docling_knowledge_base")
+        print(f"✅ Created/retrieved ChromaDB collection with {collection.count()} chunks")
     except Exception as e2:
-        print("⚠️ ChromaDB collection 'docling_knowledge_base' not found — created an empty collection.")
-    except Exception as e2:
-        # Fall back to a minimal in-memory shim with the methods the server expects.
-        print(f"⚠️ Failed to create collection (errors: {e}, {e2}). Falling back to a disabled in-memory collection.")
-        class _DisabledCollection:
-            def count(self):
-                return 0
-            def get(self, *args, **kwargs):
-                return {"documents": [], "ids": [], "metadatas": []}
-            def query(self, *args, **kwargs):
-                return {"ids": [[]], "distances": [[]], "metadatas": [[]]}
-            def upsert(self, *args, **kwargs):
-                raise RuntimeError("Collection unavailable")
-        collection = _DisabledCollection()
+        print(f"⚠️ Collection get_or_create error: {e2}")
+
+if collection is None:
+    print("⚠️ Fallback: initializing empty ChromaDB collection shim.")
+    class _DisabledCollection:
+        def count(self):
+            return 0
+        def get(self, *args, **kwargs):
+            return {"documents": [], "ids": [], "metadatas": []}
+        def query(self, *args, **kwargs):
+            return {"ids": [[]], "distances": [[]], "metadatas": [[]]}
+        def upsert(self, *args, **kwargs):
+            raise RuntimeError("Collection unavailable")
+    collection = _DisabledCollection()
 
 
 async def _ingest_github_assets() -> bool:
