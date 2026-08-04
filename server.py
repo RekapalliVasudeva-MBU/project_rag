@@ -14,6 +14,10 @@ Run:  python server.py
 """
 
 import os
+# Force HuggingFace offline mode for instant sub-second model loading from cache
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 import sys
 import json
 import time
@@ -63,8 +67,13 @@ _tp.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 trace.set_tracer_provider(_tp)
 tracer = trace.get_tracer("aethermind.rag")
 
-# --- local RAG backend (docling pipeline lives in main.py) ---
-import main as rag
+# --- local RAG backend (docling pipeline lives in main.py, lazy imported on upload) ---
+SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt", ".odt", ".pptx"]
+
+
+def get_rag_module():
+    import main as rag
+    return rag
 
 PROJECT_DIR = Path(__file__).parent
 UI_DIR = PROJECT_DIR / "web_ui"          # premium UI (static HTML) served to visitors
@@ -182,7 +191,7 @@ async def _ingest_github_assets() -> bool:
                 await _download_tree(entry_path)
             elif entry_type == "file":
                 name = (entry.get("name") or "").lower()
-                if not name.endswith(tuple(rag.SUPPORTED)):
+                if not name.endswith(tuple(SUPPORTED_EXTENSIONS)):
                     continue
                 download_url = entry.get("download_url")
                 if not download_url:
@@ -197,7 +206,7 @@ async def _ingest_github_assets() -> bool:
         print(f"⚠️ GitHub ingest failed: {exc}")
         return False
 
-    downloaded_files = sorted([p for p in source_dir.iterdir() if p.is_file() and p.suffix.lower() in rag.SUPPORTED])
+    downloaded_files = sorted([p for p in source_dir.iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS])
     if not downloaded_files:
         print(f"⚠️ No supported files found in GitHub repo {repo} path {source_path}")
         return False
@@ -205,9 +214,10 @@ async def _ingest_github_assets() -> bool:
     temp_dir = PROJECT_DIR / "rag_pdfs" / "temp_split_chunks"
     temp_dir.mkdir(parents=True, exist_ok=True)
     chunk_count = 0
+    rag_mod = get_rag_module()
     for file_path in downloaded_files:
         try:
-            chunks = await asyncio.to_thread(rag.chunk_single_pdf, str(file_path), str(temp_dir))
+            chunks = await asyncio.to_thread(rag_mod.chunk_single_pdf, str(file_path), str(temp_dir))
             if not chunks:
                 continue
             docs, metas, ids = [], [], []
@@ -452,25 +462,39 @@ def route_query(q: str):
     return ("hybrid", None)
 
 
-# ---- BM25 lexical index (Step 2): built once at startup from the collection ----
+# ---- BM25 lexical index (Step 2): built safely at startup ----
 def _tokenize(t: str) -> list:
     return re.findall(r"\w+", t.lower())
 
 
-_all = collection.get()
-_BM25_DOCS = _all.get("documents", [])
-_BM25_IDS = _all.get("ids", [])
-# Guard against an empty collection: BM25 requires at least one document.
-if not _BM25_DOCS:
-    # Use a small placeholder document that tokenizes to at least one token so
-    # BM25 initialization won't divide by zero. The placeholder is never used
-    # for actual retrieval results because the vector collection is empty.
+try:
+    _all = collection.get()
+    _BM25_DOCS = _all.get("documents", []) if _all else []
+    _BM25_IDS = _all.get("ids", []) if _all else []
+    if not _BM25_DOCS:
+        _BM25_DOCS = ["_placeholder_document_"]
+        _BM25_IDS = ["_empty_"]
+    _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
+except Exception as e:
+    print(f"⚠️ BM25 index initialization fallback: {e}")
     _BM25_DOCS = ["_placeholder_document_"]
     _BM25_IDS = ["_empty_"]
-_BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
+    _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
 
-# ---- Local CrossEncoder reranker (Step 3) ----
-_RERANKER = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+# ---- Local CrossEncoder reranker (Step 3): lazy loaded ----
+_RERANKER = None
+
+def get_reranker():
+    global _RERANKER
+    if _RERANKER is None:
+        try:
+            from sentence_transformers import CrossEncoder
+            _RERANKER = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            print("✅ Loaded CrossEncoder reranker model")
+        except Exception as e:
+            print(f"⚠️ CrossEncoder reranker unavailable ({e}); using vector similarity fallback.")
+            _RERANKER = False
+    return _RERANKER if _RERANKER is not False else None
 
 
 # ---- Hybrid retrieval + Reciprocal Rank Fusion (Step 2) ----
@@ -572,14 +596,17 @@ async def generate_rag_stream(user_question: str, session_id: str):
                     docs, metas = zip(*kept)
                     docs, metas = list(docs), list(metas)
                 if docs:
-                    pairs = [(clean_q, d) for d in docs]
-                    scores = _RERANKER.predict(pairs)
-                    # sort by score ONLY — comparing the dict metadata directly
-                    # ('<' not supported between dicts) fails whenever scores tie.
-                    ranked = sorted(zip(scores, docs, metas),
-                                    key=lambda x: x[0], reverse=True)
-                    docs = [d for _, d, _ in ranked]
-                    metas = [m for _, _, m in ranked]
+                    rr_model = get_reranker()
+                    if rr_model:
+                        try:
+                            pairs = [(clean_q, d) for d in docs]
+                            scores = rr_model.predict(pairs)
+                            ranked = sorted(zip(scores, docs, metas),
+                                            key=lambda x: x[0], reverse=True)
+                            docs = [d for _, d, _ in ranked]
+                            metas = [m for _, _, m in ranked]
+                        except Exception as e:
+                            print(f"⚠️ Reranking execution failed: {e}")
                     docs = docs[:6]
                     metas = metas[:6]
 
@@ -789,7 +816,7 @@ async def upload_endpoint(file: UploadFile = File(...)):
     # 2) chunk with the SAME docling pipeline (reuses main.py)
     try:
         chunks = await asyncio.to_thread(
-            rag.chunk_single_pdf, str(dest), str(temp_dir)
+            get_rag_module().chunk_single_pdf, str(dest), str(temp_dir)
         )
     except Exception as e:
         return JSONResponse({"ok": False, "error": f"ingest failed: {e}"}, status_code=500)

@@ -22,6 +22,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
+# Pre-download embedding model into build cache so container starts offline instantly
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
 # ---- Stage 2: Runtime image ----
 FROM python:3.11-slim AS runtime
 
@@ -41,15 +44,18 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser -s /bin/bash appuser
 
+# Copy pre-downloaded model cache to appuser home
+COPY --from=builder /root/.cache/huggingface /home/appuser/.cache/huggingface
+
 # Set working directory
 WORKDIR /app
 
 # Copy application code (respects .dockerignore)
 COPY --chown=appuser:appuser . .
 
-# Create directories for data persistence
+# Create directories for data persistence and fix permissions
 RUN mkdir -p /app/rag_vector_db /app/rag_pdfs /app/dashboard_log \
-    && chown -R appuser:appuser /app
+    && chown -R appuser:appuser /app /home/appuser/.cache
 
 # Switch to non-root user
 USER appuser
@@ -57,6 +63,8 @@ USER appuser
 # Environment variables for production
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
     HOST=0.0.0.0 \
     PORT=8000 \
     RAG_PDF_SOURCE=local \
@@ -73,4 +81,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 EXPOSE 8000
 
 # Use gunicorn for production
-CMD ["gunicorn", "server:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "50", "--preload"]
+CMD ["gunicorn", "server:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "120", "--keep-alive", "5"]
