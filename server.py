@@ -141,19 +141,24 @@ try:
         embedding_function=emb_fn,
         metadata={"hnsw:space": "cosine"},
     )
-    print(f"✅ ChromaDB collection loaded/created with {collection.count()} chunks")
+    print(f"✅ ChromaDB collection loaded with {collection.count()} chunks")
 except Exception as e_col:
-    print(f"⚠️ get_or_create_collection with emb_fn error: {e_col}")
+    print(f"⚠️ Persistent collection load error: {e_col}")
+
+if collection is None:
     try:
-        collection = client.get_or_create_collection(
+        # Cross-platform fallback: create fresh ephemeral client if sqlite load failed
+        ephemeral = chromadb.Client()
+        collection = ephemeral.create_collection(
             name="docling_knowledge_base",
+            embedding_function=emb_fn,
             metadata={"hnsw:space": "cosine"},
         )
-        print(f"✅ ChromaDB collection loaded without emb_fn ({collection.count()} chunks)")
-    except Exception as e_col2:
-        print(f"⚠️ get_or_create_collection fallback error: {e_col2}")
+        print("✅ Created fresh ephemeral ChromaDB collection for auto-seeding")
+    except Exception as e_eph:
+        print(f"⚠️ Ephemeral collection error: {e_eph}")
 
-# Auto-seed 572 prebuilt RAG chunks if collection is empty or count errors
+# Auto-seed 572 prebuilt RAG chunks if collection is empty or fresh
 if collection is not None:
     try:
         c_cnt = collection.count()
