@@ -123,9 +123,16 @@ CONFIG = load_config()
 CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", "").strip() or str(PROJECT_DIR / "rag_vector_db")
 client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 
-emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
+try:
+    emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+        model_name="all-MiniLM-L6-v2"
+    )
+except Exception as e_emb:
+    print(f"⚠️ SentenceTransformerEmbeddingFunction fallback: {e_emb}")
+    try:
+        emb_fn = embedding_functions.DefaultEmbeddingFunction()
+    except Exception:
+        emb_fn = None
 
 collection = None
 for _args in [
