@@ -87,7 +87,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           echo "Image pushed to ${{ steps.meta.outputs.tags }}"
-          docker pull ${{ steps.meta.outputs.tags }} | head -5
+          docker pull ${{ steps.meta.outputs.tags }}
 
   test-image:
     needs: build-and-push
