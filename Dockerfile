@@ -52,6 +52,7 @@ WORKDIR /app
 
 # Copy application code (respects .dockerignore)
 COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser rag_vector_db /app/rag_vector_db
 
 # Create directories for data persistence and fix permissions
 RUN mkdir -p /app/rag_vector_db /app/rag_pdfs /app/dashboard_log \

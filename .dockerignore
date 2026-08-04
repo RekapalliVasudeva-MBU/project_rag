@@ -39,6 +39,8 @@ poetry/
 Thumbs.db
 
 # Data directories
+!rag_vector_db/
+!rag_vector_db/**
 rag_pdfs/
 dashboard_log/
 pdfs/
