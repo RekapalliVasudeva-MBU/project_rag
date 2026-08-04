@@ -1,20 +1,14 @@
 """
-FastAPI production server for project_rag (LUMINA / "AetherMind" local RAG site).
+FastAPI production server for project_rag (LUMINA / "AetherMind" hosted RAG backend).
 
-Your laptop is the server. Online users reach the premium chat UI through this
-backend, which:
-  - retrieves context from the docling-built ChromaDB (rag_vector_db/)
-  - generates answers with your LOCAL Ollama model on the RTX 5070 (keep_alive -1)
-  - streams tokens back over SSE (text/event-stream) for a typewriter effect
-  - runs requests ONE AT A TIME (strict serial queue) so one user's long answer
-    does not get interleaved with another's (per spec: 1 user/session, queue the rest)
-  - logs visits + questions to PostgreSQL (only when your laptop is on)
-  - serves the premium landing + chat UI
-  - serves the downloadable "desktop app" (project_rag_hybrid) zip
-  - exposes a waitlist signup endpoint (stored in Postgres)
-
-Tunnel: ngrok (public URL) is opened in the lifespan hook (ChatGPT's plan), using
-your auth token + free static domain from server_config.json (gitignored / private).
+This service:
+  - retrieves context from a docling-built ChromaDB (rag_vector_db/)
+  - performs hybrid retrieval from indexed documents
+  - generates answers via OpenRouter (cloud LLM)
+  - streams tokens back over SSE for the web chat UI
+  - runs requests ONE AT A TIME (strict serial queue)
+  - optionally logs visitor events to PostgreSQL
+  - serves the static landing UI and upload/chat API endpoints
 
 Run:  python server.py
 """
@@ -25,6 +19,10 @@ import json
 import time
 import asyncio
 import uuid
+import shutil
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from collections import deque
 
@@ -45,11 +43,15 @@ if sys.stderr and sys.stderr.encoding and "utf" not in sys.stderr.encoding.lower
 
 import chromadb
 from chromadb.utils import embedding_functions
-import ollama
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+except Exception:  # pragma: no cover - optional dependency
+    _load_dotenv = None
 
 # --- minimal OpenTelemetry tracing (no external collector: prints to console) ---
 from opentelemetry import trace
@@ -64,64 +66,41 @@ tracer = trace.get_tracer("aethermind.rag")
 # --- local RAG backend (docling pipeline lives in main.py) ---
 import main as rag
 
-_PROJECT_DIR_FOR_KEY = Path(__file__).parent  # noqa: E402
-
-
-def _hermes_openrouter_key() -> str:
-    """Read the OpenRouter key from the hermes .env (user authorized reuse)."""
-    import os as _os
-    for env_path in (
-        _os.environ.get("LOCALAPPDATA", ""),
-        _os.environ.get("APPDATA", ""),
-    ):
-        p = Path(env_path) / "hermes" / ".env" if env_path else None
-        if p and p.exists():
-            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
-                if line.strip().startswith("OPENROUTER_API_KEY="):
-                    return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-    home_env = Path.home() / ".hermes" / ".env"
-    if home_env.exists():
-        for line in home_env.read_text(encoding="utf-8", errors="ignore").splitlines():
-            if line.strip().startswith("OPENROUTER_API_KEY="):
-                return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-    return ""
-
 PROJECT_DIR = Path(__file__).parent
 UI_DIR = PROJECT_DIR / "web_ui"          # premium UI (static HTML) served to visitors
-HYBRID_DIR = PROJECT_DIR.parent / "project_rag_hybrid"
-CONFIG_PATH = PROJECT_DIR / "server_config.json"
 DASHBOARD_LOG_DIR = PROJECT_DIR / "dashboard_log"   # local dashboard snapshots (JSON)
 
+if _load_dotenv is not None:
+    _load_dotenv(PROJECT_DIR / ".env", override=False)
+
 # ---------------------------------------------------------------------------
-# Config (private: ngrok token/domain). NEVER commit this file.
+# Config (environment variables only). Secrets should not be committed.
 # ---------------------------------------------------------------------------
 DEFAULT_CONFIG = {
-    "ngrok_auth_token": "",          # paste your ngrok token (or set NGROK_AUTH_TOKEN env)
-    "ngrok_static_domain": "",       # e.g. "upward-glowing-mutt.ngrok-free.app" (or set NGROK_DOMAIN env)
     # --- LLM (OpenRouter, cloud — no local GPU required) ---
-    "openrouter_api_key": "",        # leave empty to auto-read from hermes .env / OPENROUTER_API_KEY env
+    "openrouter_api_key": "",
     "openrouter_model": "openrouter/free",
+    "rag_pdf_source": "local",        # "local" or "github"
+    "rag_github_repo": "",           # e.g. "owner/repo"
+    "rag_github_path": "pdfs",       # directory inside the repo to scan
+    "rag_github_ref": "",            # optional branch/tag/SHA
     "host": "127.0.0.1",
     "port": 8000,
-    "ollama_model": "richardyoung/qwythos-9b-abliterated:Q4_K_M",
-    "public_base_url": "",           # auto-filled from ngrok at startup; used in download links
     "postgres": {
         "dsn": "dbname=rag_site user=postgres password=postgres host=127.0.0.1 port=5432"
     },
-    "allow_download": True,
 }
 
 
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
-    if CONFIG_PATH.exists():
-        try:
-            cfg.update(json.load(open(CONFIG_PATH, "r", encoding="utf-8")))
-        except Exception:
-            pass
     # env overrides
-    cfg["ngrok_auth_token"] = os.environ.get("NGROK_AUTH_TOKEN", cfg["ngrok_auth_token"])
-    cfg["ngrok_static_domain"] = os.environ.get("NGROK_DOMAIN", cfg["ngrok_static_domain"])
+    cfg["openrouter_api_key"] = os.environ.get("OPENROUTER_API_KEY", cfg.get("openrouter_api_key", ""))
+    cfg["openrouter_model"] = os.environ.get("OPENROUTER_MODEL", cfg.get("openrouter_model", "openrouter/free"))
+    cfg["rag_pdf_source"] = os.environ.get("RAG_PDF_SOURCE", cfg.get("rag_pdf_source", "local"))
+    cfg["rag_github_repo"] = os.environ.get("RAG_GITHUB_REPO", cfg.get("rag_github_repo", ""))
+    cfg["rag_github_path"] = os.environ.get("RAG_GITHUB_PATH", cfg.get("rag_github_path", "pdfs"))
+    cfg["rag_github_ref"] = os.environ.get("RAG_GITHUB_REF", cfg.get("rag_github_ref", ""))
     cfg["postgres"]["dsn"] = os.environ.get("RAG_PG_DSN", cfg["postgres"]["dsn"])
     return cfg
 
@@ -130,15 +109,128 @@ CONFIG = load_config()
 
 # ---------------------------------------------------------------------------
 # ChromaDB collection (built by main.py's docling pipeline)
+# Path configurable via CHROMA_DB_DIR env var for persistent volumes in cloud
 # ---------------------------------------------------------------------------
-client = chromadb.PersistentClient(path=str(PROJECT_DIR / "rag_vector_db"))
+CHROMA_DB_DIR = os.environ.get("CHROMA_DB_DIR", str(PROJECT_DIR / "rag_vector_db"))
+client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="all-MiniLM-L6-v2"
 )
-collection = client.get_collection(
-    name="docling_knowledge_base", embedding_function=emb_fn
-)
-print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
+try:
+    collection = client.get_collection(
+        name="docling_knowledge_base", embedding_function=emb_fn
+    )
+    print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
+except Exception as e:
+    # If the collection is missing (fresh repo), create an empty collection so the
+    # server can still start and serve the static UI/downloads. The RAG features
+    # (search/chat) will be effectively no-ops until PDFs are ingested.
+    try:
+        collection = client.create_collection(name="docling_knowledge_base", embedding_function=emb_fn)
+        print("⚠️ ChromaDB collection 'docling_knowledge_base' not found — created an empty collection.")
+    except Exception as e2:
+        # Fall back to a minimal in-memory shim with the methods the server expects.
+        print(f"⚠️ Failed to create collection (errors: {e}, {e2}). Falling back to a disabled in-memory collection.")
+        class _DisabledCollection:
+            def count(self):
+                return 0
+            def get(self, *args, **kwargs):
+                return {"documents": [], "ids": [], "metadatas": []}
+            def query(self, *args, **kwargs):
+                return {"ids": [[]], "distances": [[]], "metadatas": [[]]}
+            def upsert(self, *args, **kwargs):
+                raise RuntimeError("Collection unavailable")
+        collection = _DisabledCollection()
+
+
+async def _ingest_github_assets() -> bool:
+    """Download supported files from a GitHub repo path and index them into the live collection."""
+    repo = (CONFIG.get("rag_github_repo") or os.environ.get("RAG_GITHUB_REPO") or "").strip()
+    if not repo or "/" not in repo:
+        return False
+    source_path = (CONFIG.get("rag_github_path") or os.environ.get("RAG_GITHUB_PATH") or "pdfs").strip() or "pdfs"
+    ref = (CONFIG.get("rag_github_ref") or os.environ.get("RAG_GITHUB_REF") or "").strip()
+    if CONFIG.get("rag_pdf_source", "local") != "github":
+        return False
+
+    owner, repo_name = repo.split("/", 1)
+    source_dir = PROJECT_DIR / "rag_pdfs" / "github_ingest"
+    if source_dir.exists():
+        shutil.rmtree(source_dir, ignore_errors=True)
+    source_dir.mkdir(parents=True, exist_ok=True)
+
+    async def _fetch_tree(path: str) -> list[dict]:
+        api_url = f"https://api.github.com/repos/{owner}/{repo_name}/contents/{urllib.parse.quote(path)}"
+        if ref:
+            api_url = f"{api_url}?ref={urllib.parse.quote(ref)}"
+        request = urllib.request.Request(api_url, headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "aethermind-render",
+        })
+        with urllib.request.urlopen(request, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        if isinstance(payload, dict):
+            return [payload]
+        return payload if isinstance(payload, list) else []
+
+    async def _download_tree(path: str):
+        entries = await _fetch_tree(path)
+        for entry in entries:
+            entry_type = entry.get("type")
+            entry_path = entry.get("path") or ""
+            if entry_type == "dir":
+                await _download_tree(entry_path)
+            elif entry_type == "file":
+                name = (entry.get("name") or "").lower()
+                if not name.endswith(tuple(rag.SUPPORTED)):
+                    continue
+                download_url = entry.get("download_url")
+                if not download_url:
+                    continue
+                dest = source_dir / Path(entry_path).name
+                with urllib.request.urlopen(download_url, timeout=60) as resp, open(dest, "wb") as fh:
+                    shutil.copyfileobj(resp, fh)
+
+    try:
+        await _download_tree(source_path)
+    except Exception as exc:
+        print(f"⚠️ GitHub ingest failed: {exc}")
+        return False
+
+    downloaded_files = sorted([p for p in source_dir.iterdir() if p.is_file() and p.suffix.lower() in rag.SUPPORTED])
+    if not downloaded_files:
+        print(f"⚠️ No supported files found in GitHub repo {repo} path {source_path}")
+        return False
+
+    temp_dir = PROJECT_DIR / "rag_pdfs" / "temp_split_chunks"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    chunk_count = 0
+    for file_path in downloaded_files:
+        try:
+            chunks = await asyncio.to_thread(rag.chunk_single_pdf, str(file_path), str(temp_dir))
+            if not chunks:
+                continue
+            docs, metas, ids = [], [], []
+            for i, c in enumerate(chunks):
+                docs.append(c["text"])
+                headings = " > ".join(c["headings"]) if c["headings"] else "No Header"
+                metas.append({
+                    "source": c["source"],
+                    "headings": headings,
+                    "page": int(c.get("page", -1)),
+                    "access": "public",
+                })
+                ids.append(f"github_{uuid.uuid4().hex[:12]}_{i}")
+            if docs:
+                collection.upsert(documents=docs, metadatas=metas, ids=ids)
+                chunk_count += len(chunks)
+        except Exception as exc:
+            print(f"⚠️ Failed to ingest GitHub file {file_path.name}: {exc}")
+
+    if chunk_count:
+        _rebuild_bm25()
+        print(f"✅ Indexed {chunk_count} chunks from GitHub repo {repo}/{source_path}")
+    return chunk_count > 0
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +458,15 @@ def _tokenize(t: str) -> list:
 
 
 _all = collection.get()
-_BM25_DOCS = _all["documents"]
-_BM25_IDS = _all["ids"]
+_BM25_DOCS = _all.get("documents", [])
+_BM25_IDS = _all.get("ids", [])
+# Guard against an empty collection: BM25 requires at least one document.
+if not _BM25_DOCS:
+    # Use a small placeholder document that tokenizes to at least one token so
+    # BM25 initialization won't divide by zero. The placeholder is never used
+    # for actual retrieval results because the vector collection is empty.
+    _BM25_DOCS = ["_placeholder_document_"]
+    _BM25_IDS = ["_empty_"]
 _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
 
 # ---- Local CrossEncoder reranker (Step 3) ----
@@ -512,20 +611,16 @@ async def generate_rag_stream(user_question: str, session_id: str):
             span.set_attribute("route", route)
 
             # 2) generate via OpenRouter (cloud LLM — no local GPU needed, so the
-            #    site works even when the laptop is on but Ollama isn't, and is
-            #    portable to cloud hosting). Default model openrouter/free.
+            #    service is portable to cloud hosting). Default model openrouter/free.
             from openai import OpenAI
-            api_key = (CONFIG.get("openrouter_api_key")
-                       or os.environ.get("OPENROUTER_API_KEY")
-                       or _hermes_openrouter_key())
+            api_key = CONFIG.get("openrouter_api_key") or os.environ.get("OPENROUTER_API_KEY")
             if not api_key:
-                yield f"data: {json.dumps({'error': 'OpenRouter API key not configured. Set OPENROUTER_API_KEY or openrouter_api_key in server_config.json.'})}\n\n"
+                yield f"data: {json.dumps({'error': 'OpenRouter API key not configured. Set OPENROUTER_API_KEY as an environment variable.'})}\n\n"
                 return
             client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=api_key,
-                default_headers={"HTTP-Referer": "https://localhost/rag",
-                                 "X-Title": "AetherMind"},
+                default_headers={"X-Title": "AetherMind"},
             )
             om_model = CONFIG.get("openrouter_model", "openrouter/free")
             response_stream = client.chat.completions.create(
@@ -590,20 +685,36 @@ async def queue_worker():
 from contextlib import asynccontextmanager
 
 
+import signal
+
+# Global shutdown flag
+_shutdown = False
+
+
+def _signal_handler(signum, frame):
+    global _shutdown
+    print(f"[signal] Received signal {signum}, initiating graceful shutdown...")
+    _shutdown = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Register signal handlers for graceful shutdown
+    try:
+        signal.signal(signal.SIGTERM, _signal_handler)
+        signal.signal(signal.SIGINT, _signal_handler)
+    except Exception:
+        pass  # Windows may not support all signals
+
     # startup
     asyncio.create_task(queue_worker())
     store.connect()
-    ngrok_ref = _open_tunnel()  # returns (ngrok, public_url) or (None, None)
+    if CONFIG.get("rag_pdf_source", "local") == "github":
+        await _ingest_github_assets()
     try:
         yield
     finally:
-        if ngrok_ref and ngrok_ref[0]:
-            try:
-                ngrok_ref[0].disconnect(ngrok_ref[1])
-            except Exception:
-                pass
+        print("[shutdown] Graceful shutdown complete")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -618,6 +729,12 @@ app.add_middleware(
 )
 
 
+@app.get("/healthz")
+async def healthz():
+    """Lightweight liveness probe for container orchestration - no DB calls."""
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 async def health():
     pos = len(_request_queue)
@@ -627,7 +744,7 @@ async def health():
         "chunks": collection.count(),
         "queue_position": pos,
         "current_request": bool(_current),
-        "gpu_model": CONFIG["ollama_model"],
+        "model": CONFIG["openrouter_model"],
         "postgres": store.enabled,
     }
 
@@ -754,8 +871,7 @@ async def waitlist_endpoint(request: Request):
 async def public_config():
     return {
         "project": "project_rag",
-        "model": "local Ollama (RTX 5070)",
-        "allow_download": CONFIG["allow_download"],
+        "model": "OpenRouter-backed cloud model",
     }
 
 
@@ -916,39 +1032,19 @@ async def aether_docs():
 
 @app.get("/download/aether")
 async def download_aether():
-    # Serve the locally-built installer (includes the WebView2 auto-install
-    # fix for the 'opens 2s then closes' bug). Falls back to the GitHub
-    # release if the local build is missing.
-    store.log(_now_session(), "Aether-Setup", "download")
-    local = PROJECT_DIR / "dist" / "Aether-Setup.exe"
-    if local.exists():
-        return FileResponse(
-            local,
-            filename="Aether-Setup.exe",
-            media_type="application/octet-stream",
-        )
+    store.log(_now_session(), "Aether-Setup", "redirect")
     return RedirectResponse(
-        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.3.1/Aether-Setup.exe",
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop",
         status_code=302,
     )
 
 
 @app.get("/download/desktop")
 async def download_desktop():
-    if not CONFIG["allow_download"]:
-        return JSONResponse({"error": "downloads disabled"}, status_code=403)
-    # Windows installer (Inno Setup) — real .exe installer
-    exe_path = PROJECT_DIR / "dist" / "ProjectRAG-Setup.exe"
-    if not exe_path.exists():
-        return JSONResponse(
-            {"error": "build the installer first: iscc installer.iss"},
-            status_code=404,
-        )
-    store.log(_now_session(), "ProjectRAG-Setup", "download")
-    return FileResponse(
-        exe_path,
-        filename="ProjectRAG-Setup.exe",
-        media_type="application/octet-stream",
+    store.log(_now_session(), "ProjectRAG-Setup", "redirect")
+    return RedirectResponse(
+        "https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/latest",
+        status_code=302,
     )
 
 
@@ -956,49 +1052,11 @@ if UI_DIR.exists():
     app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
 
 
-# ---------------------------------------------------------------------------
-# Lifespan: ngrok tunnel
-# ---------------------------------------------------------------------------
-def _open_tunnel() -> tuple:
-    """Start an ngrok tunnel using pyngrok.
-    Returns (ngrok process, public_url) or (None, None) if not configured.
-    Requires CONFIG["ngrok_auth_token"] to be set.
-    Set CONFIG["ngrok_static_domain"] for a stable URL (e.g. "yourname.ngrok-free.app")."""
-    auth_token = CONFIG.get("ngrok_auth_token", "")
-    if not auth_token:
-        return None, None
-
-    from pyngrok import ngrok
-
-    print(f"\n{'=' * 60}")
-    print("Starting ngrok tunnel...")
-
-    try:
-        ngrok.set_auth_token(auth_token)
-        static_domain = CONFIG.get("ngrok_static_domain", "")
-
-        if static_domain:
-            tunnel = ngrok.connect(addr=CONFIG["port"], proto="https", domain=static_domain)
-        else:
-            tunnel = ngrok.connect(addr=CONFIG["port"], proto="https")
-
-        public_url = tunnel.public_url
-        print(f"✅ ngrok tunnel ready: {public_url}")
-        print(f"Local URL:  http://{CONFIG['host']}:{CONFIG['port']}/")
-        print(f"Public URL: {public_url}")
-        print("=" * 60 + "\n")
-        return tunnel, public_url
-
-    except Exception as e:
-        print(f"⚠️ Failed to start ngrok tunnel: {e}")
-        return None, None
-
-
 if __name__ == "__main__":
     import uvicorn
 
     print(f"\n[init] RAG chunks available: {collection.count()}")
-    print(f"[init] Generator: local Ollama ({CONFIG['ollama_model']}) on your GPU")
+    print(f"[init] Generator: OpenRouter model {CONFIG['openrouter_model']}")
     print(f"[init] Requests run ONE AT A TIME (serial queue).\n")
 
     # Railway / cloud: honor $PORT and bind 0.0.0.0

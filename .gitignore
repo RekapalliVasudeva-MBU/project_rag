@@ -21,7 +21,7 @@ dist/
 
 # ── Local data generated at runtime ──
 chroma/
-rag_vector_db/
+# rag_vector_db/ is committed so pre-built chunks are included in cloud deployment
 rag_pdfs/
 sessions/
 session_backups/

@@ -1,14 +1,41 @@
-PyMuPDF>=1.24.0
-docling>=1.0.0
-torch>=2.0.0
-transformers>=4.36.0
-chromadb>=0.4.0
-sentence-transformers>=2.2.0
-pillow>=10.0.0
-rich>=14.3.0
-tqdm>=4.0.0
-fastapi>=0.110.0
-uvicorn>=0.29.0
-sse-starlette>=2.0.0
-pyngrok>=7.0.0
-psycopg2-binary>=2.9.0
+# =============================================================================
+# Pinned requirements.txt with upper bounds (supply-chain security)
+# Per AGENTS.md: >=floor,<next_major for post-1.0; <0.(minor+2) for pre-1.0
+# Fixed for compatibility with docling 1.20.0
+# =============================================================================
+
+# Core ML / RAG stack
+PyMuPDF>=1.24.0,<2
+docling==1.20.0
+torch>=2.0.0,<3
+transformers>=4.36.0,<5
+chromadb==0.6.3
+sentence-transformers>=2.2.0,<3
+pillow>=10.0.0,<11
+
+# Web framework
+fastapi>=0.110.0,<1
+uvicorn>=0.29.0,<1
+sse-starlette>=2.0.0,<3
+python-multipart>=0.0.9,<1
+
+# Database
+psycopg2-binary>=2.9.0,<3
+
+# Search / ranking
+rank-bm25>=0.2.0,<1
+
+# LLM client
+openai>=1.0.0,<2
+
+# Config / utils
+python-dotenv>=1.0.0,<2
+rich>=13.7.0,<14.0.0
+tqdm>=4.0.0,<5
+
+# Production WSGI server (added for gunicorn)
+gunicorn>=21.0.0,<22
+
+# Observability (optional, lightweight)
+opentelemetry-api>=1.20.0,<2
+opentelemetry-sdk>=1.20.0,<2

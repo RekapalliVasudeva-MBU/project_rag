@@ -1,0 +1,84 @@
+# =============================================================================
+# .dockerignore - Exclude unnecessary files from Docker build context
+# Keeps image small and build fast
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+.tox
+.mypy_cache
+.ruff_cache
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+pipenv/
+poetry/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data directories
+rag_pdfs/
+dashboard_log/
+pdfs/
+
+# Logs
+*.log
+logs/
+
+# Test / eval outputs
+eval_results.json
+*.jsonl
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.whl
+
+# Documentation (not needed in container)
+README.md
+README.txt
+INSTALL.md
+*.md
+
+# Deployment configs for other platforms (not used in Docker)
+render.yaml
+railway.toml
+Procfile
+Procfile.windows
+
+# Local development files
+.env
+.env.local
+.env.example
+
+# OS / editor temp files
+*.tmp
+*.temp
+*.bak
+
+# Large model caches (downloaded at runtime if needed)
+~/.cache/huggingface/
+~/.cache/torch/
