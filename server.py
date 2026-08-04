@@ -645,7 +645,7 @@ async def generate_rag_stream(user_question: str, session_id: str):
             # 2) generate via OpenRouter (cloud LLM — no local GPU needed, so the
             #    service is portable to cloud hosting). Default model openrouter/free.
             from openai import OpenAI
-            api_key = CONFIG.get("openrouter_api_key") or os.environ.get("OPENROUTER_API_KEY")
+            api_key = os.environ.get("OPENROUTER_API_KEY", "").strip() or CONFIG.get("openrouter_api_key", "").strip()
             if not api_key:
                 yield f"data: {json.dumps({'error': 'OpenRouter API key not configured. Set OPENROUTER_API_KEY as an environment variable.'})}\n\n"
                 return
