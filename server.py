@@ -153,28 +153,34 @@ except Exception as e_col:
     except Exception as e_col2:
         print(f"⚠️ get_or_create_collection fallback error: {e_col2}")
 
-# Auto-seed 572 prebuilt RAG chunks if collection is empty (e.g. fresh cloud boot)
-if collection is not None and getattr(collection, "count", lambda: 0)() == 0:
-    prebuilt_file = PROJECT_DIR / "prebuilt_chunks.json"
-    if prebuilt_file.exists():
-        try:
-            with open(prebuilt_file, "r", encoding="utf-8") as f:
-                pb_data = json.load(f)
-            pb_docs = pb_data.get("documents", [])
-            pb_metas = pb_data.get("metadatas", [])
-            pb_ids = pb_data.get("ids", [])
-            if pb_docs:
-                batch_sz = 100
-                for i in range(0, len(pb_docs), batch_sz):
-                    end = min(i + batch_sz, len(pb_docs))
-                    collection.upsert(
-                        documents=pb_docs[i:end],
-                        metadatas=pb_metas[i:end],
-                        ids=pb_ids[i:end],
-                    )
-                print(f"🚀 Auto-seeded {collection.count()} RAG chunks from prebuilt_chunks.json!")
-        except Exception as e_pb:
-            print(f"⚠️ Prebuilt chunks auto-seed error: {e_pb}")
+# Auto-seed 572 prebuilt RAG chunks if collection is empty or count errors
+if collection is not None:
+    try:
+        c_cnt = collection.count()
+    except Exception:
+        c_cnt = 0
+
+    if c_cnt == 0:
+        prebuilt_file = PROJECT_DIR / "prebuilt_chunks.json"
+        if prebuilt_file.exists():
+            try:
+                with open(prebuilt_file, "r", encoding="utf-8") as f:
+                    pb_data = json.load(f)
+                pb_docs = pb_data.get("documents", [])
+                pb_metas = pb_data.get("metadatas", [])
+                pb_ids = pb_data.get("ids", [])
+                if pb_docs:
+                    batch_sz = 100
+                    for i in range(0, len(pb_docs), batch_sz):
+                        end = min(i + batch_sz, len(pb_docs))
+                        collection.upsert(
+                            documents=pb_docs[i:end],
+                            metadatas=pb_metas[i:end],
+                            ids=pb_ids[i:end],
+                        )
+                    print(f"🚀 Auto-seeded {collection.count()} RAG chunks from prebuilt_chunks.json!")
+            except Exception as e_pb:
+                print(f"⚠️ Prebuilt chunks auto-seed error: {e_pb}")
 
 if collection is None:
     print("⚠️ Fallback: initializing empty ChromaDB collection shim.")
