@@ -135,27 +135,23 @@ except Exception as e_emb:
         emb_fn = None
 
 collection = None
-for _args in [
-    {"name": "docling_knowledge_base"},
-    {"name": "docling_knowledge_base", "embedding_function": emb_fn},
-]:
-    try:
-        col = client.get_collection(**_args)
-        if col is not None and col.count() > 0:
-            collection = col
-            print(f"✅ Loaded ChromaDB collection with {collection.count()} chunks")
-            break
-    except Exception as _e:
-        print(f"⚠️ get_collection attempt failed: {_e}")
-
-if collection is None:
+try:
+    collection = client.get_or_create_collection(
+        name="docling_knowledge_base",
+        embedding_function=emb_fn,
+        metadata={"hnsw:space": "cosine"},
+    )
+    print(f"✅ ChromaDB collection loaded/created with {collection.count()} chunks")
+except Exception as e_col:
+    print(f"⚠️ get_or_create_collection with emb_fn error: {e_col}")
     try:
         collection = client.get_or_create_collection(
-            name="docling_knowledge_base", embedding_function=emb_fn
+            name="docling_knowledge_base",
+            metadata={"hnsw:space": "cosine"},
         )
-        print(f"✅ Retrieved/created ChromaDB collection with {collection.count()} chunks")
-    except Exception as e2:
-        print(f"⚠️ Collection get_or_create error: {e2}")
+        print(f"✅ ChromaDB collection loaded without emb_fn ({collection.count()} chunks)")
+    except Exception as e_col2:
+        print(f"⚠️ get_or_create_collection fallback error: {e_col2}")
 
 # Auto-seed 572 prebuilt RAG chunks if collection is empty (e.g. fresh cloud boot)
 if collection is not None and getattr(collection, "count", lambda: 0)() == 0:
