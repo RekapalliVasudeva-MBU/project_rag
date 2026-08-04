@@ -176,14 +176,22 @@ if collection is not None:
                 pb_ids = pb_data.get("ids", [])
                 if pb_docs:
                     batch_sz = 100
+                    pb_embs = pb_data.get("embeddings", [])
                     for i in range(0, len(pb_docs), batch_sz):
                         end = min(i + batch_sz, len(pb_docs))
-                        collection.upsert(
-                            documents=pb_docs[i:end],
-                            metadatas=pb_metas[i:end],
-                            ids=pb_ids[i:end],
-                        )
+                        upsert_kwargs = {
+                            "documents": pb_docs[i:end],
+                            "metadatas": pb_metas[i:end],
+                            "ids": pb_ids[i:end],
+                        }
+                        if pb_embs and len(pb_embs) >= end:
+                            upsert_kwargs["embeddings"] = pb_embs[i:end]
+                        collection.upsert(**upsert_kwargs)
                     print(f"🚀 Auto-seeded {collection.count()} RAG chunks from prebuilt_chunks.json!")
+                    try:
+                        _rebuild_bm25()
+                    except Exception:
+                        pass
             except Exception as e_pb:
                 print(f"⚠️ Prebuilt chunks auto-seed error: {e_pb}")
 
@@ -516,19 +524,25 @@ def _tokenize(t: str) -> list:
     return re.findall(r"\w+", t.lower())
 
 
-try:
-    _all = collection.get()
-    _BM25_DOCS = _all.get("documents", []) if _all else []
-    _BM25_IDS = _all.get("ids", []) if _all else []
-    if not _BM25_DOCS:
+def _rebuild_bm25():
+    global _BM25_DOCS, _BM25_IDS, _BM25
+    try:
+        if collection is not None:
+            _all = collection.get()
+            _BM25_DOCS = _all.get("documents", []) if _all else []
+            _BM25_IDS = _all.get("ids", []) if _all else []
+        if not _BM25_DOCS:
+            _BM25_DOCS = ["_placeholder_document_"]
+            _BM25_IDS = ["_empty_"]
+        _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
+        print(f"✅ Rebuilt BM25 index with {len(_BM25_DOCS)} documents")
+    except Exception as e:
+        print(f"⚠️ BM25 index rebuild fallback: {e}")
         _BM25_DOCS = ["_placeholder_document_"]
         _BM25_IDS = ["_empty_"]
-    _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
-except Exception as e:
-    print(f"⚠️ BM25 index initialization fallback: {e}")
-    _BM25_DOCS = ["_placeholder_document_"]
-    _BM25_IDS = ["_empty_"]
-    _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
+        _BM25 = BM25Okapi([_tokenize(d) for d in _BM25_DOCS])
+
+_rebuild_bm25()
 
 # ---- Local CrossEncoder reranker (Step 3): lazy loaded ----
 _RERANKER = None
@@ -549,7 +563,20 @@ def get_reranker():
 # ---- Hybrid retrieval + Reciprocal Rank Fusion (Step 2) ----
 def sync_hybrid_search(query: str, n_results: int = 10):
     clean_q = _clean_query(query)
-    sem = collection.query(query_texts=[clean_q], n_results=n_results)["ids"][0]
+    sem = []
+    try:
+        res = collection.query(query_texts=[clean_q], n_results=min(n_results, collection.count() or 1))
+        if res and res.get("ids") and res["ids"]:
+            sem = res["ids"][0]
+    except Exception as e_sem:
+        print(f"⚠️ Semantic search fallback: {e_sem}")
+        try:
+            res_all = collection.get(limit=n_results)
+            if res_all and res_all.get("ids"):
+                sem = res_all["ids"]
+        except Exception:
+            sem = []
+
     lex_scores = _BM25.get_scores(_tokenize(clean_q))
     lex = [_BM25_IDS[i] for i in sorted(range(len(lex_scores)),
             key=lambda i: lex_scores[i], reverse=True)[:n_results]]
