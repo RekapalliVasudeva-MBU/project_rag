@@ -118,7 +118,7 @@ const typing=document.getElementById('typing');
 const queueNote=document.getElementById('queue-note');
 let busy=false;
 // Use Azure Container App FQDN as default API base
-const DEFAULT_API_BASE = 'https://aethermind-rag.eastasia.azurecontainerapps.io';
+const DEFAULT_API_BASE = 'https://api.aethermind.page';
 const apiBase=(window.__AETHER_API_BASE__ || new URLSearchParams(window.location.search).get('api') || DEFAULT_API_BASE).replace(/\/$/, '');
 function apiUrl(path){const p=path.startsWith('/')?path:`/${path}`;return apiBase?`${apiBase}${p}`:p;}
 function scrollToChat(){document.getElementById('chat').scrollIntoView({behavior:'smooth'});document.getElementById('q').focus();}
