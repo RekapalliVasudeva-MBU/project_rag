@@ -1,54 +1,88 @@
-# AetherMind — project_rag (Web RAG Server)
+<div align="center">
 
-> **🌐 Live site:** [https://marshy-ancient-rebuild.ngrok-free.dev](https://marshy-ancient-rebuild.ngrok-free.dev)
-> — chat with your PDFs, **download the desktop app**, and read the docs.
-> Desktop app download: **[GitHub Releases](https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.0/Aether-Setup.exe)** (fast CDN) ·
-> Desktop docs: **[/aether-docs](https://marshy-ancient-rebuild.ngrok-free.dev/aether-docs)**.
+# 🌐 AetherMind — Web RAG Server ⚡
 
-The **hosted web RAG server** for the AetherMind project — a FastAPI app that lets you chat with
-your own PDFs through a hybrid retrieval pipeline, served on a public website.
+### *Hosted Web RAG & Document Intelligence Platform — Part of the AetherMind 2-in-1 AI Suite*
 
-It is one half of the **AetherMind** 2-in-1 suite:
-
-| Repo | What it is |
-|------|------------|
-| **`project_rag`** (this repo) | The **web RAG server** — chat with your PDFs in a browser. |
-| [`aether-desktop`](https://github.com/<your-org>/aether-desktop) | The **desktop companion app** — the same engine packaged as a Windows `.exe`. |
-
-Both share the same hybrid RAG core; this repo runs it in the cloud and also **hosts the website
-and the desktop-app download + documentation**.
-
-## What it does
-
-- Hybrid RAG: **Docling** PDF parsing → chunks → **BM25 + vector** retrieval → **reranker** → **RRF** fusion.
-- Chat UI (Chat / Shelf / Settings tabs) with your own provider key or a local Ollama model.
-- Serves the public website (`/`) and the **desktop app download** (`/download/aether`) +
-  **desktop docs** (`/aether-docs`).
-- PostgreSQL-backed visitor logging (optional).
-
-## Run locally
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env        # add your provider key / ngrok token
-python server.py            # http://127.0.0.1:8000
-```
-
-The server auto-opens an ngrok tunnel to a static domain when `NGROK_AUTHTOKEN` is set.
-
-## Project layout
-
-```
-server.py            # FastAPI app + ngrok tunnel + download routes
-web_ui/              # website (index.html, knowledge.html, aether-docs.html)
-dist/                # built installers (ProjectRAG-Setup.exe, Aether-Setup.exe) — not committed
-```
-
-## Related
-
-- Desktop app: [`aether-desktop`](https://github.com/<your-org>/aether-desktop)
-- Desktop docs: `/aether-docs` on the live site
+[![Live Site](https://img.shields.io/badge/Live_Site-aethermind.page-7c6cff?style=for-the-badge&logo=google-chrome&logoColor=white)](https://aethermind.page)
+[![Desktop Repo](https://img.shields.io/badge/Desktop_App-aether--desktop-0078D4?style=for-the-badge&logo=github)](https://github.com/RekapalliVasudeva-MBU/aether-desktop)
+[![FastAPI](https://img.shields.io/badge/Framework-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 
 ---
 
-© AetherMind — a 2-in-1 project: a hosted web RAG server and a self-hosted desktop agent.
+### 🌐 [**Visit Live Website (aethermind.page)**](https://aethermind.page) &nbsp;|&nbsp; 🖥️ [**Download Desktop App (`aether-desktop`)**](https://github.com/RekapalliVasudeva-MBU/aether-desktop) &nbsp;|&nbsp; 📖 [**Read Documentation**](https://aethermind.page/aether-docs)
+
+</div>
+
+---
+
+## ⚡ Direct Download & Links
+
+| Platform | Link | Description |
+| :--- | :--- | :--- |
+| **🌐 Live Web Platform** | [**aethermind.page**](https://aethermind.page) | Web PDF Chat & Knowledge Hub |
+| **🖥️ Desktop AI Companion** | [**aether-desktop Repository**](https://github.com/RekapalliVasudeva-MBU/aether-desktop) | Windows AI OS App with Apache Burr |
+| **⬇️ Windows Desktop Installer** | [**Download Aether-Setup.exe**](https://github.com/RekapalliVasudeva-MBU/aether-desktop/releases/download/v1.0.0/Aether-Setup.exe) | Direct One-Click Windows Setup |
+| **📖 Complete Documentation** | [**aethermind.page/aether-docs**](https://aethermind.page/aether-docs) | Platform Docs & API Reference |
+
+---
+
+## 💡 The AetherMind 2-in-1 Suite
+
+AetherMind consists of two interlinked components sharing the same hybrid RAG engine:
+
+| Repository | Function | Deployment |
+| :--- | :--- | :--- |
+| **`project_rag`** *(This Repo)* | **Hosted Web RAG Server & Portal** | Cloud / Web Server (`aethermind.page`) |
+| [**`aether-desktop`**](https://github.com/RekapalliVasudeva-MBU/aether-desktop) | **Windows AI OS Desktop App** | Self-Hosted Windows Installer (`.exe`) |
+
+---
+
+## 🔥 Features & Architecture
+
+- **Hybrid RAG Pipeline**:
+  - **Docling PDF Parsing** ➔ Structural chunk extraction.
+  - **BM25 Keyword Search + Vector Retrieval** ➔ High precision context lookup.
+  - **Cross-Encoder Reranker + RRF Fusion** ➔ Optimal chunk ranking.
+- **Web UI & Knowledge Hub**:
+  - Chat, Shelf, and Settings tabs for web-based document intelligence.
+- **Public Gateway & Documentation Server**:
+  - Serves public landing page (`/`), document viewer (`/knowledge`), and documentation (`/aether-docs`).
+
+---
+
+## 🛠️ Run Locally
+
+```bash
+# 1. Clone repository
+git clone https://github.com/RekapalliVasudeva-MBU/project_rag.git
+cd project_rag
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Launch local server
+python server.py
+```
+
+Access local web interface at `http://127.0.0.1:8000`.
+
+---
+
+## 📁 Repository Layout
+
+```text
+server.py            # FastAPI server & route handlers
+web_ui/              # Web application assets (index.html, knowledge.html, aether-docs.html)
+rag_vector_db/       # ChromaDB vector store
+prebuilt_chunks.json # Document chunk index
+```
+
+---
+
+<div align="center">
+
+© **AetherMind** — Hybrid Web RAG Server & Document Intelligence.
+
+</div>
